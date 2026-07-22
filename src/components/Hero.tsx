@@ -1,15 +1,18 @@
 
 import React from 'react';
+import Image from 'next/image';
 
 const Hero: React.FC = () => {
   return (
     <div className="relative bg-gray-900 text-white py-16 px-4 sm:py-20 sm:px-6 lg:py-24 lg:px-8 overflow-hidden">
       {/* Placeholder for background image or solid color */}
       <div className="absolute inset-0">
-        <img
-          className="w-full h-full object-cover opacity-40"
-          src="https://via.placeholder.com/1920x1080?text=Modern+Kitchen+Appliance"
+        <Image
           alt="Modern Kitchen Appliances"
+          src="https://via.placeholder.com/1920x1080?text=Modern+Kitchen+Appliance"
+          layout="fill"
+          objectFit="cover"
+          className="opacity-40"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/70 to-transparent"></div>
       </div>
