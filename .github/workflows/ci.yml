@@ -1,0 +1,100 @@
+```yaml
+# This project is the frontend application for [Product Name/Service]. It serves as the primary user interface (UI),
+# responsible for rendering dynamic content, handling user interactions, and communicating with backend services via APIs.
+# It is structured as a Single-Page Application (SPA) to provide a rich and responsive user experience.
+#
+# Sprint work completed this cycle:
+# PF-4, PF-5, PF-6, PF-7, PF-8, PF-9, PF-10, PF-11, PF-12, PF-13, PF-14, PF-15, PF-16, PF-18, PF-17
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Using a recent LTS Node.js version
+          cache: 'npm' # Cache npm dependencies for faster builds
+
+      - name: Install dependencies
+        run: npm ci # Uses package-lock.json for consistent installs
+
+      - name: Run tests
+        # Assuming a `test` script exists in package.json
+        run: npm test
+
+      - name: Run linter
+        # Assuming a `lint` script exists in package.json for code quality checks
+        run: npm run lint
+
+  deploy:
+    name: Continuous Deployment
+    runs-on: ubuntu-latest
+    needs: ci # This job depends on the 'ci' job successfully completing
+    # Deploy only on pushes to the 'main' branch, after the 'ci' job passes
+    if: github.ref == 'refs/heads/main' && success()
+    environment: production # Good practice to specify an environment for deployments
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # a. Source nvm so node/npm/pnpm are available in the non-interactive SSH shell
+            export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+            # b. cd to the absolute deploy directory
+            cd ${{ secrets.EC2_DEPLOY_PATH }}
+
+            # c. Fetch and hard-reset to origin/main to ensure a clean deploy
+            #    .env is gitignored, so it will not be touched by reset --hard
+            git fetch origin main
+            git reset --hard origin/main
+
+            # d. Sync new env vars from .env.sample into .env (append missing keys only, never overwrite)
+            if [ -f .env.sample ]; then
+              touch .env
+              while IFS= read -r line; do
+                # skip blank lines and comments
+                [[ -z "$line" || "$line" == \#* ]] && continue
+                key=$(echo "$line" | cut -d= -f1)
+                # only append if key not already present in .env
+                if ! grep -q "^${key}=" .env 2>/dev/null; then
+                  echo "$line" >> .env
+                  echo "⚠️  New env var added (set real value): ${key}"
+                fi
+              done < .env.sample
+            fi
+
+            # e. Install dependencies (npm ci for Node.js projects)
+            npm ci
+
+            # f. Run build step (e.g. npm run build for frontend projects)
+            npm run build
+
+            # g. Restart the app with PM2 using zero-downtime reload
+            #    The || handles the first-ever start when no PM2 process named "app" exists yet
+            pm2 reload app --update-env || pm2 start npm --name app -- run start
+
+            # h. pm2 save to persist the PM2 process list across reboots
+            pm2 save
+```
